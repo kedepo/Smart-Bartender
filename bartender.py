@@ -14,23 +14,33 @@ from drinks import drink_list, drink_options
 
 GPIO.setmode(GPIO.BCM)
 
+#var to change the size of the screen
 SCREEN_WIDTH = 128
 SCREEN_HEIGHT = 64
 
+# pin for left pin (and bounce time)
 LEFT_BTN_PIN = 13
 LEFT_PIN_BOUNCE = 1000
 
+# pin for right pin (and bounce time)
 RIGHT_BTN_PIN = 5
 RIGHT_PIN_BOUNCE = 2000
 
-OLED_RESET_PIN = 15
-OLED_DC_PIN = 16
+#set pin for alcohol button (high debounce for wait effect)
+ALCOHOL_BTN_PIN = 19 #-----!!!!-----
+ALCOHOL_PIN_BOUNCE = 2000 * 100 #-----!!!!-----
 
+#for more advanced display functions (not used atm)
+OLED_RESET_PIN = 14
+OLED_DC_PIN = 15
+
+#neopixel pins and vars
 NUMBER_NEOPIXELS = 45
 NEOPIXEL_DATA_PIN = 26
 NEOPIXEL_CLOCK_PIN = 6
 NEOPIXEL_BRIGHTNESS = 64
 
+#number, liquid the pump can "move", tweek if amount is incorrect
 FLOW_RATE = 60.0/100.0
 
 class Bartender(MenuDelegate): 
@@ -43,10 +53,12 @@ class Bartender(MenuDelegate):
 
 		self.btn1Pin = LEFT_BTN_PIN
 		self.btn2Pin = RIGHT_BTN_PIN
-	 
+		self.btn3Pin = ALCOHOL_BTN_PIN #-----!!!!-----
+
 	 	# configure interrups for buttons
 	 	GPIO.setup(self.btn1Pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 		GPIO.setup(self.btn2Pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)  
+		GPIO.setup(self.btn3Pin, GPIO.IN, pull_up_down=GPIO.PUD_UP) #-----!!!!-----
 
 		# configure screen
 		spi_bus = 0
@@ -98,19 +110,28 @@ class Bartender(MenuDelegate):
 	def startInterrupts(self):
 		GPIO.add_event_detect(self.btn1Pin, GPIO.FALLING, callback=self.left_btn, bouncetime=LEFT_PIN_BOUNCE)  
 		GPIO.add_event_detect(self.btn2Pin, GPIO.FALLING, callback=self.right_btn, bouncetime=RIGHT_PIN_BOUNCE)  
+		GPIO.add_event_detect(self.btn3Pin, GPIO.FALLING, callback=self.alcohol_btn, bouncetime=ALCOHOL_PIN_BOUNCE)#-----!!!!-----
+
 
 	def stopInterrupts(self):
 		GPIO.remove_event_detect(self.btn1Pin)
 		GPIO.remove_event_detect(self.btn2Pin)
+		GPIO.remove_event_detect(self.btn3Pin)
 
-	def buildMenu(self, drink_list, drink_options):
+	def buildMenu(self, drink_list, drink_options, alcoholic_drinks_enabled = False):
 		# create a new main menu
 		m = Menu("Main Menu")
 
 		# add drink options
 		drink_opts = []
 		for d in drink_list:
-			drink_opts.append(MenuItem('drink', d["name"], {"ingredients": d["ingredients"]}))
+			# check if allowed by admin button
+			if alcoholic_drinks_enabled == False:
+				#check if the drink has alcohol
+				if d["alcoholic"] == False:#-----!!!!-----
+					drink_opts.append(MenuItem('drink', d["name"], {"ingredients": d["ingredients"]}))#-----!!!!-----
+			else:
+				drink_opts.append(MenuItem('drink', d["name"], {"ingredients": d["ingredients"]}))
 
 		configuration_menu = Menu("Configure")
 
@@ -218,7 +239,7 @@ class Bartender(MenuDelegate):
 		self.menuContext.showMenu()
 
 		# sleep for a couple seconds to make sure the interrupts don't get triggered
-		time.sleep(2);
+		time.sleep(2)#;
 
 		# reenable interrupts
 		# self.startInterrupts()
@@ -320,7 +341,7 @@ class Bartender(MenuDelegate):
 		self.lightsEndingSequence()
 
 		# sleep for a couple seconds to make sure the interrupts don't get triggered
-		time.sleep(2);
+		time.sleep(2)#;
 
 		# reenable interrupts
 		# self.startInterrupts()
@@ -331,8 +352,18 @@ class Bartender(MenuDelegate):
 			self.menuContext.advance()
 
 	def right_btn(self, ctx):
+
 		if not self.running:
+			print("cocktail selected")
 			self.menuContext.select()
+		else:
+			print ("cocktail already being made")
+
+	def alcohol_btn(self, ctx):
+		#rebuild the menu
+
+		bartender.buildMenu(drink_list, drink_options, True)#-----!!!!-----
+
 
 	def updateProgressBar(self, percent, x=15, y=15):
 		height = 10
@@ -354,9 +385,11 @@ class Bartender(MenuDelegate):
 			while True:
 				time.sleep(0.1)
 		  
-		except KeyboardInterrupt:  
-			GPIO.cleanup()       # clean up GPIO on CTRL+C exit  
-		GPIO.cleanup()           # clean up GPIO on normal exit 
+		except Exception as ex:
+			print(ex)	# prints error #-----!
+
+		finally:
+			GPIO.cleanup()	# clean up GPIO on exit
 
 		traceback.print_exc()
 
